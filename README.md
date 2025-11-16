@@ -9,7 +9,8 @@ This project explores the use of machine learning and deep learning models on ER
 # Structure
 
 * `code/`
-  * `era5_baseline_linreg_multistep.ipynb`: Jupyter notebook for loading, pre-processing, and training baseline linear regression models.
+  * `era5_baseline_linreg_multistep.ipynb`: Jupyter notebook for loading, pre-processing, and training baseline linear regression models with multi-step predictions.
+  * `DS6050-Milestone2.ipynb`: Jupyter notebook for loading, pre-processing, and training baseline linear regression models with single-step predictions.
 
 # Requirements
 
