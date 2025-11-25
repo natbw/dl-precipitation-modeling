@@ -40,25 +40,24 @@ class ClimatologyModel:
 
 
 class PersistenceModel:
-    
     def __init__(self, window=7):
         self.window = window
         self.y_train = None
-    
+
     def fit(self, y_train):
         self.y_train = y_train
-    
-    def predict(self, y_test_window):
-        y_pred = []
-        history = list(self.y_train[-self.window:])
+
+    def predict(self, y_test_window, horizon=1):
+        history = list(self.y_train)
+        preds = []
 
         for i in range(len(y_test_window)):
-            y_next = np.mean(history[-self.window:])
-            y_pred.append(y_next)
+            avg = np.mean(history[-self.window:])
+            preds.append(avg)
             history.append(y_test_window[i])
-        
-        return np.array(y_pred)
-    
+
+        return np.array(preds)
+
 
 class LinearRegressionModel:
     
