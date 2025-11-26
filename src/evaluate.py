@@ -2,6 +2,7 @@
 # Evaluate models
 
 from sklearn.metrics import root_mean_squared_error, mean_absolute_error
+import matplotlib.pyplot as plt
 import numpy as np
 
 def evaluate_predictions(y_true, y_pred, model="Model"):

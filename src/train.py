@@ -101,6 +101,10 @@ def train_lstm_model(
     criterion = torch.nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
+    train_losses = []
+    val_losses = []
+    results = {}
+
     for ep in range(epochs):
         model.train()
         total_loss = 0.0
@@ -112,16 +116,20 @@ def train_lstm_model(
             loss = criterion(y_pred, y_batch)
             loss.backward()
             optimizer.step()
-            
             total_loss += loss.item() * X_batch.size(0)
+
+        avg_train_rmse = np.sqrt(total_loss / len(X_train_window))
+        train_losses.append(avg_train_rmse)
             
         model.eval()
         with torch.no_grad():
             val_pred = model(X_val_window.to(device))
-            val_loss = criterion(val_pred.cpu(), y_val_window).item()
+            val_mse = criterion(val_pred.cpu(), y_val_window).item()
+            val_rmse = np.sqrt(val_mse)
+        val_losses.append(val_rmse)
 
-        if (ep + 1) % 5 == 0 or ep == 0:
-            print(f"Epoch {ep+1}/{epochs} | Train Loss: {total_loss/len(X_train_window)} | Val Loss: {val_loss}")
+        if (ep + 1) % 20 == 0 or ep == 0:
+            print(f"Epoch {ep+1}/{epochs} | Train RMSE: {avg_train_rmse} | Val RMSE: {val_rmse}")
 
     with torch.no_grad():
         y_pred_test = model(X_test_window.to(device)).cpu().numpy()
@@ -129,14 +137,26 @@ def train_lstm_model(
     lstm_rmse = root_mean_squared_error(y_test_window.numpy(), y_pred_test)
     lstm_mae  = mean_absolute_error(y_test_window.numpy(), y_pred_test)
 
-    return {
-        "y_pred": y_pred_test.flatten(),
-        "rmse": lstm_rmse,
-        "mae": lstm_mae,
-        "model": model
+    results = {
+        "LSTM": {
+            "y_pred": y_pred_test.flatten(),
+            "rmse": lstm_rmse,
+            "mae": lstm_mae,
+            "train_rmse": train_losses,
+            "val_rmse": val_losses,
+            "model": model
+        }
     }
 
+    return results
+
 def print_results(results):
-    print("Baseline Results:")
-    for model, result in results.items():
-        print(f"{model}: RMSE = {result['rmse']}, MAE = {result['mae']}")
+    print("Training Results:")
+    print("------------------")
+
+    for model_name, result in results.items():
+        name = model_name.replace("_", " ").upper()
+        rmse = result.get("rmse", "N/A")
+        mae  = result.get("mae", "N/A")
+
+        print(f"{name} --> RMSE = {rmse}, MAE = {mae}")
