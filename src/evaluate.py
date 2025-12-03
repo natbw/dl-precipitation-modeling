@@ -2,7 +2,6 @@
 # Evaluate models
 
 from sklearn.metrics import root_mean_squared_error, mean_absolute_error
-import matplotlib.pyplot as plt
 import numpy as np
 
 def evaluate_predictions(y_true, y_pred, model="Model"):
@@ -25,17 +24,17 @@ def evaluate_extreme_events(y_true, y_pred, percentile=95):
     threshold = np.percentile(y_true, percentile)
     mask = y_true >= threshold
     
-    if np.sum(mask) == 0:
+    total_extreme = np.sum(mask)
+    if total_extreme == 0:
         print(f"No extreme events above {percentile}th percentile.")
         return None, None, 0, 0
     
     rmse_extreme = root_mean_squared_error(y_true[mask], y_pred[mask])
     mae_extreme = mean_absolute_error(y_true[mask], y_pred[mask])
-    count = np.sum(y_pred[mask] >= threshold)
-    total_extreme = np.sum(mask)
+    predicted_extreme_count = np.sum(y_pred[mask] >= threshold)
     
     print(f"Extreme events > {percentile}th percentile -> RMSE: {rmse_extreme}, MAE: {mae_extreme}")
-    print(f"Total extreme events: {total_extreme}, Total extreme events predicted: {count}")
+    print(f"Total extreme events: {total_extreme}, Predicted extreme events: {predicted_extreme_count}")
 
-    return rmse_extreme, mae_extreme, count, total_extreme
+    return rmse_extreme, mae_extreme, predicted_extreme_count, total_extreme
     

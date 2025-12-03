@@ -28,12 +28,12 @@ def load_data(data_path):
 
     feature_names = npz["feature_names"]
 
-    return (X_train, y_train, dates_train, X_val, y_val, dates_val, X_test, y_test, dates_test, feature_names)
+    return X_train, y_train, dates_train, X_val, y_val, dates_val, X_test, y_test, dates_test, feature_names
 
 def train_baseline_models(data_path, T=7, horizon=3, p_window=7):
 
     # LOAD DATA
-    (X_train, y_train, dates_train, X_val, y_val, dates_val, X_test, y_test, dates_test, feature_names) = load_data(data_path)
+    X_train, y_train, dates_train, X_val, y_val, dates_val, X_test, y_test, dates_test, feature_names = load_data(data_path)
 
     X_train_window, y_train_window = create_history_windows(X_train, y_train, T=T, horizon=horizon)
     X_test_window, y_test_window = create_history_windows(X_test, y_test, T=T, horizon=horizon)
@@ -72,6 +72,15 @@ def train_baseline_models(data_path, T=7, horizon=3, p_window=7):
 
     return results
 
+def quantile_loss(y_pred, y_true, q=0.5):
+    e = y_true - y_pred
+    return torch.mean(torch.where(e >= 0, q * e, (q - 1) * e))
+
+def log_mse_loss(y_pred, y_true):
+    y_pred = torch.clamp(y_pred, min=0.0)
+    y_true = torch.clamp(y_true, min=0.0)
+    return torch.nn.MSELoss()(torch.log1p(y_pred), torch.log1p(y_true))
+
 def train_lstm_model(
     data_path,
     T=7,
@@ -79,14 +88,18 @@ def train_lstm_model(
     hidden_dim=64,
     num_layers=1,
     dropout=0.0,
-    epochs=20,
+    epochs=100,
     batch_size=64,
     lr=1e-3,
-    device='cuda'
+    device='cuda',
+    patience=10,
+    weight_decay=1e-4,
+    loss_type='rmse',
+    quantile_q=0.5
 ):
     
     # LOAD DATA
-    (X_train, y_train, dates_train, X_val, y_val, dates_val, X_test, y_test, dates_test, feature_names) = load_data(data_path)
+    X_train, y_train, dates_train, X_val, y_val, dates_val, X_test, y_test, dates_test, feature_names = load_data(data_path)
 
     X_train_window, y_train_window = create_history_windows_torch(X_train, y_train, T=T, horizon=horizon)
     X_val_window, y_val_window = create_history_windows_torch(X_val, y_val, T=T, horizon=horizon)
@@ -96,19 +109,36 @@ def train_lstm_model(
 
     train_dataset = data.TensorDataset(X_train_window, y_train_window)
     train_loader = data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_dataset = data.TensorDataset(X_val_window, y_val_window)
+    val_loader = data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
     model = LSTMModel(input_dim=input_dim, hidden_dim=hidden_dim, num_layers=num_layers, dropout=dropout).to(device)
-    criterion = torch.nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
+
+    if loss_type == 'rmse' or loss_type == 'mse':
+        criterion = torch.nn.MSELoss()
+    elif loss_type == 'mae':
+        criterion = torch.nn.L1Loss()
+    elif loss_type == 'huber':
+        criterion = torch.nn.SmoothL1Loss(beta=1.0)
+    elif loss_type == 'quantile':
+        criterion = lambda pred, true: quantile_loss(pred, true, q=quantile_q)
+    elif loss_type == 'log_mse':
+        criterion = log_mse_loss
+    else:
+        raise ValueError(f"Loss type: {loss_type} not a valid option.")
 
     train_losses = []
     val_losses = []
-    results = {}
+    best_val_rmse = float('inf')
+    best_model_state = None
+    patience_counter = 0
 
     for ep in range(epochs):
+        # TRAINING
         model.train()
-        total_loss = 0.0
-
+        total_train_sq_error = 0.0
         for X_batch, y_batch in train_loader:
             X_batch, y_batch = X_batch.to(device), y_batch.to(device)
             optimizer.zero_grad()
@@ -116,34 +146,71 @@ def train_lstm_model(
             loss = criterion(y_pred, y_batch)
             loss.backward()
             optimizer.step()
-            total_loss += loss.item() * X_batch.size(0)
+            if loss_type == 'rmse' or loss_type == 'mse':
+                total_train_sq_error += torch.nn.functional.mse_loss(y_pred, y_batch, reduction='sum').item()
+            else:
+                total_train_sq_error += loss.item() * X_batch.size(0)
 
-        avg_train_rmse = np.sqrt(total_loss / len(X_train_window))
-        train_losses.append(avg_train_rmse)
-            
+        avg_train_loss = total_train_sq_error / len(train_dataset)
+        if loss_type == 'rmse':
+            avg_train_loss = np.sqrt(avg_train_loss)
+        train_losses.append(avg_train_loss)
+
+        # VALIDATION
         model.eval()
+        total_val_sq_error = 0.0
+        total_val_loss = 0.0
+        count = 0
         with torch.no_grad():
-            val_pred = model(X_val_window.to(device))
-            val_mse = criterion(val_pred.cpu(), y_val_window).item()
-            val_rmse = np.sqrt(val_mse)
-        val_losses.append(val_rmse)
+            for X_val_batch, y_val_batch in val_loader:
+                X_val_batch, y_val_batch = X_val_batch.to(device), y_val_batch.to(device)
+                val_pred = model(X_val_batch)
+                val_loss = criterion(val_pred, y_val_batch)
+                total_val_loss += val_loss.item() * X_val_batch.size(0)
+                total_val_sq_error += torch.nn.functional.mse_loss(val_pred, y_val_batch, reduction='sum').item()
+                count += X_val_batch.size(0)
 
-        if (ep + 1) % 20 == 0 or ep == 0:
-            print(f"Epoch {ep+1}/{epochs} | Train RMSE: {avg_train_rmse} | Val RMSE: {val_rmse}")
+        avg_val_loss = total_val_loss / count
+        if loss_type == 'rmse':
+            avg_val_loss = np.sqrt(avg_val_loss)
+        val_losses.append(avg_val_loss)
 
+        val_rmse = np.sqrt(total_val_sq_error / count)
+        scheduler.step(val_rmse)
+
+        # EARLY STOPPING
+        if val_rmse < best_val_rmse:
+            best_val_rmse = val_rmse
+            best_model_state = model.state_dict()
+            patience_counter = 0
+        else:
+            patience_counter += 1
+
+        if patience_counter >= patience:
+            print(f"Early stopping at epoch {ep + 1}")
+            break
+
+        if ep == 0 or (ep + 1) % 25 == 0:
+            print(f"Epoch {ep+1}/{epochs} | Train Loss ({loss_type.upper()}): {avg_train_loss} | Val Loss ({loss_type.upper()}): {avg_val_loss} | Val RMSE: {val_rmse}")
+
+    if best_model_state is not None:
+        model.load_state_dict(best_model_state)
+
+    model.eval()
     with torch.no_grad():
         y_pred_test = model(X_test_window.to(device)).cpu().numpy()
 
     lstm_rmse = root_mean_squared_error(y_test_window.numpy(), y_pred_test)
-    lstm_mae  = mean_absolute_error(y_test_window.numpy(), y_pred_test)
+    lstm_mae = mean_absolute_error(y_test_window.numpy(), y_pred_test)
 
     results = {
         "LSTM": {
             "y_pred": y_pred_test.flatten(),
             "rmse": lstm_rmse,
             "mae": lstm_mae,
-            "train_rmse": train_losses,
-            "val_rmse": val_losses,
+            "train_loss": train_losses,
+            "val_loss": val_losses,
+            "loss_type": loss_type.upper(),
             "model": model
         }
     }
@@ -151,12 +218,11 @@ def train_lstm_model(
     return results
 
 def print_results(results):
-    print("Training Results:")
+    print("Test Data Results:")
     print("------------------")
-
+    
     for model_name, result in results.items():
         name = model_name.replace("_", " ").upper()
         rmse = result.get("rmse", "N/A")
-        mae  = result.get("mae", "N/A")
-
+        mae = result.get("mae", "N/A")
         print(f"{name} --> RMSE = {rmse}, MAE = {mae}")

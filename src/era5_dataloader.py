@@ -119,7 +119,7 @@ def era5_data_loader(
     # SAVE SINGLE FILE
     print("Saving dataset...")
 
-    filename = f"era5_{time_name}.zarr"
+    filename = f"daily_era5_{time_name}_{len(valid_vars)}features.zarr"
     output_path = data_folder / filename
 
     ds = ds.chunk({"time": 5000})
@@ -156,7 +156,7 @@ def era5_data_loader(
 
 # UNCOMMENT THE CODE BELOW TO RUN. DEPENDING ON DATE RANGE AND VARIABLES SELECTED
 # THIS CAN TAKE HOURS TO RUN AND COULD BE TOO LARGE OF A FILE TO DOWNLOAD
-# USE THE LOCAL COPY DOWNLOADED TO ../data IN THIS REPOSITORY
+# USE THE LOCAL COPY ALREADY DOWNLOADED TO ../data IN THIS REPOSITORY
     
 # if __name__ == "__main__":
 
@@ -170,8 +170,16 @@ def era5_data_loader(
 #         "relative_humidity",
 #         "geopotential",
 #         "u_component_of_wind",
+#         "10m_u_component_of_wind",
 #         "v_component_of_wind",
+#         "10m_v_component_of_wind",
+#         "wind_speed",
 #         "divergence",
+#         "total_column_water_vapour",
+#         "total_cloud_cover",
+#         "mean_sea_level_pressure",
+#         "2m_temperature",
+#         "sea_surface_temperature",
 #         "total_precipitation_6hr"
 #     ]
 
@@ -181,7 +189,7 @@ def era5_data_loader(
 #     average_levels = True
 #     daily_resample = True
 
-#     time_range = ("1980-01-01", "2020-12-31")
+#     time_range = ("1960-01-01", "2020-12-31")
 
 #     data_folder = Path("..") / "test_data"
 

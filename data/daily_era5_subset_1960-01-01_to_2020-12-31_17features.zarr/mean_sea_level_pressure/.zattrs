@@ -1,0 +1,10 @@
+{
+  "long_name": "Mean sea level pressure",
+  "short_name": "msl",
+  "standard_name": "air_pressure_at_mean_sea_level",
+  "units": "Pa",
+  "coordinates": "latitude longitude",
+  "_ARRAY_DIMENSIONS": [
+    "time"
+  ]
+}

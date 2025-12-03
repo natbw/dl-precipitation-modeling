@@ -7,6 +7,8 @@ from pathlib import Path
 import xarray as xr
 import pandas as pd
 import numpy as np
+import joblib
+import json
 
 def era5_preprocessor(
     zarr_path,
@@ -15,27 +17,38 @@ def era5_preprocessor(
     val_range,
     test_range,
     features=None,
-    target="total_precipitation"
+    target="total_precipitation",
+    save_scaler=True
 ):
     # MAKE SURE FOLDER EXISTS
     save_folder = Path(save_folder)
     save_folder.mkdir(exist_ok=True)
 
     # LOAD ZARR FILE
-    print(f"Loading Zarr file from {zarr_path} ...")
+    print(f"Loading Zarr file: {zarr_path}")
     ds = xr.open_zarr(zarr_path).load()
 
-    # FILTER FEATURES IF SPECIFIED
     if features is None:
         features = [v for v in ds.data_vars if v != target]
 
-    print(f"Selected features: {features}")
-    print(f"Target: {target}")
+    print(f"Features: {features}")
+    print(f"Target : {target}")
 
     # CONVERT ZARR TO DATAFRAME
     df = ds[features + [target]].to_dataframe()
-    df = df.drop(columns=[col for col in ["latitude", "longitude"] if col in df.columns])
+    for col in ["latitude", "longitude"]:
+        if col in df.columns:
+            df = df.drop(columns=col)
 
+    # DROP ANY FEATURE COLUMN WILL ALL NULL VALUES
+    all_null_cols = [col for col in features if df[col].isnull().all()]
+    if all_null_cols:
+        print(f"Warning: The following feature columns are entirely null and will be dropped: {all_null_cols}")
+        df = df.drop(columns=all_null_cols)
+        features = [f for f in features if f not in all_null_cols]
+    else:
+        print("No empty feature columns found.")
+        
     # CONFIRM NO NULL VALUES
     if df.isnull().values.any():
         missing_count = df.isnull().sum().sum()
@@ -47,63 +60,74 @@ def era5_preprocessor(
     cols = [c for c in df.columns if c != target] + [target]
     df = df[cols]
     df.index = pd.to_datetime(df.index)
+    df = df.sort_index()
 
     # SAVE UNSCALED TO CSV
     df_to_save = df.copy()
     df_to_save.index = df_to_save.index.strftime("%m-%d-%Y")
-    df_to_save.to_csv(save_folder / "era5_standard.csv")
-    print(f"Unscaled dataframe saved to {save_folder / 'era5_standard.csv'}")
-
-    # SCALE FEATURES
-    scaler = StandardScaler()
-    feature_values = df[features].values
-    scaled_features = scaler.fit_transform(feature_values)
-    df_scaled = pd.DataFrame(scaled_features, columns=features, index=df.index)
-    df_scaled[target] = df[target].values
+    df_to_save.to_csv(save_folder / "era5_1960to2020_17feats_standard.csv")
+    print(f"Unscaled dataframe saved to {save_folder / 'era5_1960to2020_17feats_standard.csv'}")
 
     # SPLIT DATA
-    train_mask = (df_scaled.index >= pd.to_datetime(train_range[0])) & (df_scaled.index <= pd.to_datetime(train_range[1]))
-    val_mask = (df_scaled.index >= pd.to_datetime(val_range[0])) & (df_scaled.index <= pd.to_datetime(val_range[1]))
-    test_mask = (df_scaled.index >= pd.to_datetime(test_range[0])) & (df_scaled.index <= pd.to_datetime(test_range[1]))
-
-    df_train = df_scaled.loc[train_mask]
-    df_val = df_scaled.loc[val_mask]
-    df_test = df_scaled.loc[test_mask]
-
-    dates_train = df_train.index.strftime("%m-%d-%Y").to_numpy()
-    dates_val = df_val.index.strftime("%m-%d-%Y").to_numpy()
-    dates_test = df_test.index.strftime("%m-%d-%Y").to_numpy()
+    df_train = df[(df.index >= pd.to_datetime(train_range[0])) & (df.index <= pd.to_datetime(train_range[1]))]
+    df_val = df[(df.index >= pd.to_datetime(val_range[0])) & (df.index <= pd.to_datetime(val_range[1]))]
+    df_test = df[(df.index >= pd.to_datetime(test_range[0])) & (df.index <= pd.to_datetime(test_range[1]))]
 
     print(f"Train size: {df_train.shape}")
     print(f"Validation size: {df_val.shape}")
     print(f"Test size: {df_test.shape}")
 
+    # SCALE FEATURES
+    scaler = StandardScaler()
+    scaler.fit(df_train[features])
+    
+    df_train_scaled = df_train.copy()
+    df_val_scaled = df_val.copy()
+    df_test_scaled = df_test.copy()
+    
+    df_train_scaled[features] = scaler.transform(df_train[features])
+    df_val_scaled[features] = scaler.transform(df_val[features])
+    df_test_scaled[features] = scaler.transform(df_test[features])
+    
+    # SAVE SCALER
+    if save_scaler:
+        scaler_path = save_folder / "era5_1960to2020_17feats_features_scaler.pkl"
+        joblib.dump(scaler, scaler_path)
+        print(f"Feature scaler saved to {scaler_path}")
+
     # SAVE AS ARRAYS
+    dates_train = df_train_scaled.index.strftime("%m-%d-%Y").to_numpy()
+    dates_val = df_val_scaled.index.strftime("%m-%d-%Y").to_numpy()
+    dates_test = df_test_scaled.index.strftime("%m-%d-%Y").to_numpy()
+
     np.savez(
-        save_folder / "era5_processed.npz",
-        X_train=df_train[features].values,
+        save_folder / "era5_1960to2020_17feats_processed.npz",
+        X_train=df_train_scaled[features].values,
         y_train=df_train[target].values,
         dates_train=dates_train,
-        X_val=df_val[features].values,
+    
+        X_val=df_val_scaled[features].values,
         y_val=df_val[target].values,
         dates_val=dates_val,
-        X_test=df_test[features].values,
+    
+        X_test=df_test_scaled[features].values,
         y_test=df_test[target].values,
         dates_test=dates_test,
+    
         feature_names=np.array(features),
         target_name=target
     )
-
-    print(f"Preprocessed data saved to {save_folder / 'era5_processed.npz'}")
+    
+    print(f"Preprocessed data saved to {save_folder / 'era5_1960to2020_17feats_processed.npz'}")
 
 # UNCOMMENT CODE TO RUN WITH CUSTOM DATA
 # DATA USED FOR THIS PROJECT IS IN DATA FOLDER IN REPOSITORY ALREADY
 
 # if __name__ == "__main__":
-#     zarr_path = "../data/era5_subset_1980-01-01_to_2020-12-31.zarr"
+#     zarr_path = "../data/daily_era5_subset_1960-01-01_to_2020-12-31_17features.zarr"
 #     save_folder = "../data"
 
-#     train_range = ("1980-01-01", "2015-12-31")
+#     train_range = ("1960-01-01", "2015-12-31")
 #     val_range = ("2016-01-01", "2018-12-31")
 #     test_range = ("2019-01-01", "2020-12-31")
 
@@ -111,11 +135,12 @@ def era5_preprocessor(
 #     target = "total_precipitation"
     
 # era5_preprocessor(
-#         zarr_path=zarr_path,
-#         save_folder=save_folder,
-#         train_range=train_range,
-#         val_range=val_range,
-#         test_range=test_range,
-#         features=features,
-#         target=target
+#     zarr_path=zarr_path,
+#     save_folder=save_folder,
+#     train_range=train_range,
+#     val_range=val_range,
+#     test_range=test_range,
+#     features=features,
+#     target=target,
+#     save_scaler=True
 #     )

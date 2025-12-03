@@ -28,18 +28,19 @@ class ClimatologyModel:
     
     def __init__(self):
         self.day_mean = None
-        
+
     def fit(self, y_train, dates_train):
         day_of_year = np.array([pd.to_datetime(d).timetuple().tm_yday for d in dates_train])
         unique_days = np.unique(day_of_year)
         self.day_mean = {day: np.mean(y_train[day_of_year == day]) for day in unique_days}
-        
+
     def predict(self, dates_test):
         day_of_year = np.array([pd.to_datetime(d).timetuple().tm_yday for d in dates_test])
         return np.array([self.day_mean[day] for day in day_of_year])
 
 
 class PersistenceModel:
+
     def __init__(self, window=7):
         self.window = window
         self.y_train = None
@@ -65,14 +66,14 @@ class LinearRegressionModel:
         self.model = LinearRegression()
         self.T = None
         self.d = None
-        
+
     def fit(self, X_train, y_train):
         self.T = X_train.shape[1]
         self.d = X_train.shape[2]
 
         X_flat = X_train.reshape(len(X_train), self.T * self.d)
         self.model.fit(X_flat, y_train)
-        
+
     def predict(self, X_test):
         X_flat = X_test.reshape(len(X_test), self.T * self.d)
         return self.model.predict(X_flat)

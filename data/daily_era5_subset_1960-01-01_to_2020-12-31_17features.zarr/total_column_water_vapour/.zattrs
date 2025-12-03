@@ -1,0 +1,10 @@
+{
+  "long_name": "Total column vertically-integrated water vapour",
+  "short_name": "tcwv",
+  "standard_name": "lwe_thickness_of_atmosphere_mass_content_of_water_vapor",
+  "units": "kg m**-2",
+  "coordinates": "latitude longitude",
+  "_ARRAY_DIMENSIONS": [
+    "time"
+  ]
+}

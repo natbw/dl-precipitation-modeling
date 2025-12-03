@@ -1,0 +1,10 @@
+{
+  "long_name": "Geopotential",
+  "short_name": "z",
+  "standard_name": "geopotential",
+  "units": "m**2 s**-2",
+  "coordinates": "latitude longitude",
+  "_ARRAY_DIMENSIONS": [
+    "time"
+  ]
+}

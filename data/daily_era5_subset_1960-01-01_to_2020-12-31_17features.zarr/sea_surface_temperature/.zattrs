@@ -1,0 +1,9 @@
+{
+  "long_name": "Sea surface temperature",
+  "short_name": "sst",
+  "units": "K",
+  "coordinates": "latitude longitude",
+  "_ARRAY_DIMENSIONS": [
+    "time"
+  ]
+}

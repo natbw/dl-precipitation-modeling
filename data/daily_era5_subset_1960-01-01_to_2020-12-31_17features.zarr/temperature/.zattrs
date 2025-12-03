@@ -1,0 +1,10 @@
+{
+  "long_name": "Temperature",
+  "short_name": "t",
+  "standard_name": "air_temperature",
+  "units": "K",
+  "coordinates": "latitude longitude",
+  "_ARRAY_DIMENSIONS": [
+    "time"
+  ]
+}
