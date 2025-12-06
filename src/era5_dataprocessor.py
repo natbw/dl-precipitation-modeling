@@ -20,6 +20,37 @@ def era5_preprocessor(
     target="total_precipitation",
     save_scaler=True
 ):
+    """
+    Preprocess ERA5/WeatherBench2 Zarr dataset to prepare inputs and outputs for
+    machine learning models.
+    
+    Converts Zarr to pandas DataFrame, handles missing data, splits into train,
+    validation, and test sets, scales features, and saves processed data as numpy arrays.
+    
+    Parameters
+    ----------
+    zarr_path : str or Path
+        Path to the ERA5 Zarr dataset.
+    save_folder : str or Path
+        Folder to save preprocessed data and scaler.
+    train_range : tuple of str
+        Start and end dates for training data, e.g. ("1960-01-01", "2015-12-31").
+    val_range : tuple of str
+        Start and end dates for validation data.
+    test_range : tuple of str
+        Start and end dates for test data.
+    features : list of str, optional
+        List of features to use. If None, all variables except the target are used.
+    target : str, optional
+        Name of the target variable (default "total_precipitation").
+    save_scaler : bool, optional
+        Whether to save the fitted StandardScaler to disk (default True).
+    
+    Returns
+    -------
+    None
+        Saves processed data to .npz and scaler to .pkl in save_folder.
+    """
     # MAKE SURE FOLDER EXISTS
     save_folder = Path(save_folder)
     save_folder.mkdir(exist_ok=True)

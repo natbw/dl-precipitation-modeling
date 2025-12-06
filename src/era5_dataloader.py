@@ -20,7 +20,46 @@ def era5_data_loader(
         data_folder="./test_data",
         batch_years=5
 ):
+    """
+    Load ERA5/WeatherBench2 data from Google Cloud Storage, subset spatially and
+    temporally, resample daily, optionally average over pressure levels, and save
+    as a local Zarr dataset.
 
+    Parameters
+    ----------
+    base_url : str
+        Google Cloud Storage URL pointing to the ERA5/WeatherBench2 Zarr dataset.
+    variables : list of str
+        List of variable names to load from the dataset.
+    region : dict
+        Spatial subset parameters. Must include 'type':
+            - "point" -> {'type': 'point', 'lat': float, 'lon': float}
+            - "box" -> {'type': 'box', 'lat_min': float, 'lat_max': float, 
+                        'lon_min': float, 'lon_max': float}
+    levels : list, optional
+        List of pressure levels to select (default is None, no level selection)
+    average_levels : bool, optional
+        Whether to average variables over pressure levels if present (default True)
+    daily_resample : bool, optional
+        Whether to resample data to daily resolution (default True)
+    time_range : tuple, optional
+        Temporal subset in the form ('YYYY-MM-DD', 'YYYY-MM-DD'). If None, uses all time steps.
+    data_folder : str or Path, optional
+        Local folder where the Zarr file will be saved (default './test_data')
+    batch_years : int, optional
+        Number of years per batch when saving yearly chunks (default 5). Currently unused.
+
+    Returns
+    -------
+    list of Path
+        List containing the path to the saved Zarr dataset.
+
+    Notes
+    -----
+    - Daily resampling converts 6-hourly precipitation to daily total precipitation (in mm).
+    - Non-precipitation variables are averaged over the day.
+    - Large datasets may take hours to download and save.
+    """
     print("\n=== ERA5 DATA LOADER ===\n")
 
     # CONNECT TO GOOGLE CLOUD STORAGE
@@ -87,10 +126,12 @@ def era5_data_loader(
             non_precip_vars = [v for v in ds.data_vars if v not in precip_vars]
 
             ds_daily = xr.Dataset()
-
+            
+            # Average non-precipitation variables
             if non_precip_vars:
                 ds_daily = ds[non_precip_vars].resample(time="1D").mean()
-
+            
+            # Sum precipitation variables to daily total, clip negatives, convert to mm
             for pv in precip_vars:
                 daily_sum = ds[pv].resample(time="1D").sum()
                 daily_sum = daily_sum.clip(min=0)
@@ -122,6 +163,7 @@ def era5_data_loader(
     filename = f"daily_era5_{time_name}_{len(valid_vars)}features.zarr"
     output_path = data_folder / filename
 
+    # Chunk the dataset for faster writing and compression
     ds = ds.chunk({"time": 5000})
     encoding = {v: {"compressor": numcodecs.Blosc()} for v in ds.data_vars}
     with ProgressBar():

@@ -6,7 +6,29 @@ import torch.nn as nn
 import numpy as np
 
 def create_history_windows_torch(X, y, T=7, horizon=3):
-
+    """
+    Convert time series data into windowed input-output tensors for PyTorch models.
+    
+    Parameters
+    ----------
+    X : np.array
+        Input features (e.g., daily precipitation or predictors)
+        Shape: (num_days, num_features)
+    y : np.array
+        Target values (e.g., precipitation at future time steps)
+        Shape: (num_days,)
+    T : int, optional
+        Number of past days to include in each input sequence (default is 7)
+    horizon : int, optional
+        Prediction horizon: how many days ahead to predict (default is 3)
+    
+    Returns
+    -------
+    X_window_tensor : torch.FloatTensor
+        Tensor of shape (num_samples, T, num_features) containing input sequences
+    y_window_tensor : torch.FloatTensor
+        Tensor of shape (num_samples, 1) containing corresponding targets
+    """
     X_window = []
     y_window = []
     num_days = len(X)
@@ -25,7 +47,24 @@ def create_history_windows_torch(X, y, T=7, horizon=3):
 
 
 class LSTMModel(nn.Module):
+    """
+    LSTM-based model for sequence forecasting of precipitation.
+    
+    Parameters
+    ----------
+    input_dim : int
+        Number of input features per time step
+    hidden_dim : int, optional
+        Number of hidden units in the LSTM (default is 64)
+    num_layers : int, optional
+        Number of stacked LSTM layers (default is 1)
+    dropout : float, optional
+        Dropout rate between LSTM layers (default is 0.0)
+    """
     def __init__(self, input_dim, hidden_dim=64, num_layers=1, dropout=0.0):
+        """
+        Initialize the LSTM model architecture.
+        """
         super(LSTMModel, self).__init__()
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
@@ -36,14 +75,30 @@ class LSTMModel(nn.Module):
             batch_first=True,
             dropout=dropout if num_layers > 1 else 0.0
         )
+        
+        # Fully connected output layer (predicts 1 value per sequence)
         self.fc = nn.Linear(hidden_dim, 1)
-        self.relu = nn.ReLU()
+        # Optional ReLU can be enabled if needed
+        # self.relu = nn.ReLU()
 
     def forward(self, x):
+        """
+        Forward pass through the LSTM model.
+        
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input tensor of shape (batch_size, sequence_length, input_dim)
+        
+        Returns
+        -------
+        torch.Tensor
+            Output tensor of shape (batch_size, 1) with predicted precipitation
+        """
         x, _ = self.lstm(x)
         x = x[:, -1, :]
         x = self.fc(x)
-        x = self.relu(x)
+        # x = self.relu(x)
         return x
 
 
