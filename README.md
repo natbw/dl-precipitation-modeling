@@ -27,22 +27,36 @@ It provides scripts to preprocess ERA5 Zarr data, train baseline, LSTM, and Tran
     * `evaluate.py`: Functions to compute RMSE, MAE, and extreme event metrics.
     * `train.py`: Scripts to train models.
 
-# Requirements
+# Running Locally
 
-The following dependencies need to be installed to run the code:
+Follow these steps to set up and run the project on your local machine:
 
-* Python 3.x
-* PyTorch
-* NumPy
-* Pandas
-* Matplotlib
-* xarray
-* netCDF4
-* scikit-learn
-* seaborn
-* dask
-* zarr
-* fsspec
+1. **Clone the repository**
+
+```
+git clone https://github.com/natbw/dl-precipitation-modeling
+cd dl-precipitation-modeling
+```
+
+2. **Create a Conda environment**
+
+```
+conda create -n dl_precip
+```
+
+3. **Activate the environment**
+
+```
+conda activate dl_precip
+```
+
+4. **Install dependencies**
+
+```
+pip install -r requirements.txt
+```
+
+5. Run data loader and processing files in `src` or launch notebooks for model training and exploration.
 
 # Data
 
