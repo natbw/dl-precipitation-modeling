@@ -3,7 +3,7 @@
 
 from src.baseline_models import *
 from src.evaluate import evaluate_predictions, evaluate_extreme_events
-from src.deeplearning_models import LSTMModel, create_history_windows_torch
+from src.deeplearning_models import LSTMModel, create_history_windows_torch, TransformerEncoderModel
 from sklearn.metrics import root_mean_squared_error, mean_absolute_error, mean_squared_error, r2_score
 import torch
 import torch.optim as optim
@@ -315,6 +315,118 @@ def train_lstm_model(
     }
 
     return results
+
+def train_transformer_model(
+    data_path,
+    T=7,
+    horizon=3,
+    model_dim=64,
+    num_heads=4,
+    num_layers=2,
+    dropout=0.0,
+    epochs=50,
+    batch_size=64,
+    lr=1e-3,
+    device="cuda",
+    patience=10,
+    weight_decay=1e-4
+):
+    """
+    Train a Transformer encoder model for precipitation forecasting.
+    """
+
+    # LOAD DATA
+    X_train, y_train, dates_train, X_val, y_val, dates_val, X_test, y_test, dates_test, feature_names = load_data(data_path)
+
+    X_train_window, y_train_window = create_history_windows_torch(X_train, y_train, T=T, horizon=horizon)
+    X_val_window, y_val_window = create_history_windows_torch(X_val, y_val, T=T, horizon=horizon)
+    X_test_window, y_test_window = create_history_windows_torch(X_test, y_test, T=T, horizon=horizon)
+
+    input_dim = X_train_window.shape[2]
+
+    train_dataset = data.TensorDataset(X_train_window, y_train_window)
+    val_dataset = data.TensorDataset(X_val_window, y_val_window)
+    train_loader = data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+
+    model = TransformerEncoderModel(
+        input_dim=input_dim,
+        model_dim=model_dim,
+        num_heads=num_heads,
+        num_layers=num_layers,
+        output_dim=1
+    ).to(device)
+
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+    criterion = torch.nn.MSELoss()
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=5)
+
+    best_val = float("inf")
+    best_state = None
+    patience_counter = 0
+
+    train_losses, val_losses = [], []
+
+    for ep in range(epochs):
+        # TRAINING
+        model.train()
+        train_loss = 0
+        for Xb, yb in train_loader:
+            Xb, yb = Xb.to(device), yb.to(device)
+            optimizer.zero_grad()
+            preds = model(Xb)
+            loss = criterion(preds, yb)
+            loss.backward()
+            optimizer.step()
+            train_loss += loss.item() * len(Xb)
+        train_loss /= len(train_dataset)
+        train_losses.append(train_loss)
+
+        # VALIDATION
+        model.eval()
+        val_loss = 0
+        with torch.no_grad():
+            for Xb, yb in val_loader:
+                Xb, yb = Xb.to(device), yb.to(device)
+                preds = model(Xb)
+                loss = criterion(preds, yb)
+                val_loss += loss.item() * len(Xb)
+
+        val_loss /= len(val_dataset)
+        val_losses.append(val_loss)
+        scheduler.step(val_loss)
+
+        if val_loss < best_val:
+            best_val = val_loss
+            best_state = model.state_dict()
+            patience_counter = 0
+        else:
+            patience_counter += 1
+
+        if patience_counter >= patience:
+            break
+
+    model.load_state_dict(best_state)
+
+    # TESTING
+    model.eval()
+    with torch.no_grad():
+        y_pred_test = model(X_test_window.to(device)).cpu().numpy()
+
+    y_true_test = y_test_window.numpy()
+    rmse = np.sqrt(mean_squared_error(y_true_test, y_pred_test))
+    mae = mean_absolute_error(y_true_test, y_pred_test)
+
+    return {
+        "transformer": {
+            "model": model,
+            "y_pred": y_pred_test.flatten(),
+            "rmse": rmse,
+            "mae": mae,
+            "train_loss": train_losses,
+            "val_loss": val_losses
+        }
+    }
 
 def print_results(results):
     """

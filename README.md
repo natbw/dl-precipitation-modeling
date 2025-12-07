@@ -7,6 +7,8 @@ This project explores the use of machine learning and deep learning models on ER
 
 It provides scripts to preprocess ERA5 Zarr data, train baseline, LSTM, and Transformer models, and evaluate predictions including extreme precipitation events.
 
+This repository is structured to be run locally on either CPU or GPU enabled processing.
+
 
 # Structure
 
@@ -14,11 +16,14 @@ It provides scripts to preprocess ERA5 Zarr data, train baseline, LSTM, and Tran
     * `daily_era5_subset_1960-01-01_to_2020-12-31_17features.zarr` : ERA5 subset used for training and testing covering 60 years and 17 features.
     * `era5_subset_1980-01-01_to_2020-12-31.zarr`: ERA5 subset used for initial model implementation covering 40 years and 6 features.
     * Processed zarr files in `csv` or `.pkl` file types for model training.
+* `experiments/`
+    * `ablation_history.py`: Script for running ablation study of the effect of model performance on history windows.
 * `notebooks/`
     * `01_era5_EDA.ipynb`: Jupyter notebook for exploring and visualizing ERA5 data.
     * `02_BaselinePipeline.ipynb`: Jupyter notebook for training and evaluating Baseline models.
     * `03_LSTMPipeline.ipynb`: Jupyter notebook for training and evaluating LSTM models.
     * `04_TransformerPipeline.ipynb`: Jupyter notebook for training and evaluating Transformer models.
+    * `05_ExperimentsPipeline.ipynb`: Jupyter notebook for running and evaluating ablation study on history windows.
 * `src/`
     * `baseline_models.py`: Climatology, Persistence, and Linear Regression models.
     * `deeplearning_models.py`: LSTM model and helper functions.

@@ -102,6 +102,48 @@ class LSTMModel(nn.Module):
         return x
 
 
-# class TransformerModel(nn.Module):
-#     pass
+class TransformerEncoderModel(nn.Module):
+    """
+    Transformer encoder model for precipitation forecasting.
+
+    Parameters
+    ----------
+    input_dim : int
+        Number of input features per time step.
+    model_dim : int, optional
+        Hidden model dimension (default 64).
+    num_heads : int, optional
+        Number of attention heads (default 4).
+    num_layers : int, optional
+        Number of encoder layers (default 2).
+    output_dim : int, optional
+        Output dimension (default 1).
+    """
+
+    def __init__(self, input_dim, model_dim=64, num_heads=4, num_layers=2, output_dim=1):
+        super().__init__()
+        self.input_embedding = nn.Linear(input_dim, model_dim)
+
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=model_dim,
+            nhead=num_heads,
+            batch_first=True
+        )
+        self.transformer_encoder = nn.TransformerEncoder(
+            encoder_layer,
+            num_layers=num_layers
+        )
+        
+        self.fc = nn.Linear(model_dim, output_dim)
+
+    def forward(self, x):
+        # x: (batch, seq, features)
+        x = self.input_embedding(x)
+        x = x.permute(1, 0, 2)  # (seq, batch, model_dim)
+
+        out = self.transformer_encoder(x)
+        out = out[-1, :, :]      # last time step
+        out = self.fc(out)
+        return out
+
     
