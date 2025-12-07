@@ -122,8 +122,12 @@ drive.mount('/content/drive')
 
 2. Install dependencies in Colab:
 
-`!pip install numpy pandas matplotlib xarray netCDF4 scikit-learn seaborn dask zarr fsspec torch --quiet`
+```
+!pip install numpy pandas matplotlib xarray netCDF4 scikit-learn seaborn dask zarr fsspec torch --quiet
+```
 
 3. Update paths to point to Drive folder:
 
-`data_path = "/content/drive/MyDrive/ERA5/processed/era5_1960to2020_17feats_processed.npz"`
+```
+data_path = "/content/drive/MyDrive/ERA5/processed/era5_1960to2020_17feats_processed.npz"
+```
