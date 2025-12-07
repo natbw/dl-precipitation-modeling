@@ -46,7 +46,7 @@ cd dl-precipitation-modeling
 2. **Create a Conda environment**
 
 ```
-conda create -n dl_precip
+conda create -n dl_precip pip
 ```
 
 3. **Activate the environment**
